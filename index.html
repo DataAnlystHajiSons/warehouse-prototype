@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Warehouse Viewer</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="controls-container">
+        <button id="reset-layout-btn">Reset Layout</button>
+    </div>
+    <div id="info-box">
+        <h2>Bale Information</h2>
+        <p><strong>CP Number:</strong> <span id="cp-number">N/A</span></p>
+        <p><strong>Vehicle Number:</strong> <span id="vehicle-number">N/A</span></p>
+        <p><em>Click on a bale to see its details.</em></p>
+        <button id="change-position-btn" style="display: none;">Change Position</button>
+    </div>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.164.1/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.164.1/examples/jsm/"
+            }
+        }
+    </script>
+    <script type="module" src="app.js"></script>
+</body>
+</html>
