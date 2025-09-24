@@ -1,6 +1,11 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
+// --- SUPABASE SETUP ---
+const SUPABASE_URL = 'https://ilruefcoyvibwhrjbkgw.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlscnVlZmNveXZpYndocmpia2d3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg2OTM0NzAsImV4cCI6MjA3NDI2OTQ3MH0.dT8KFjDbPfHkzZ-8bdxD8_6JxeNfk_HtgBwxTQw9UWk';
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
 // --- SCENE SETUP ---
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xf0f0f0);
@@ -100,7 +105,7 @@ const baleMaterial = new THREE.MeshStandardMaterial({ color: 0xdaa520 }); // Gol
 const bales = [];
 
 // --- RIBBON COLOR LOGIC ---
-const cpColorMap = new Map();
+const containerColorMap = new Map();
 const colorPalette = [
     0xff0000, // Red
     0x00ff00, // Green
@@ -115,30 +120,39 @@ const colorPalette = [
 ];
 let nextColorIndex = 0;
 
-function getCpColor(cpPrefix) {
-    if (!cpColorMap.has(cpPrefix)) {
-        cpColorMap.set(cpPrefix, colorPalette[nextColorIndex % colorPalette.length]);
+function getContainerColor(containerNo) {
+    if (!containerNo) {
+        return 0x808080; // Return a default color like grey if container_no is null or undefined
+    }
+    if (!containerColorMap.has(containerNo)) {
+        containerColorMap.set(containerNo, colorPalette[nextColorIndex % colorPalette.length]);
         nextColorIndex++;
     }
-    return cpColorMap.get(cpPrefix);
+    return containerColorMap.get(containerNo);
 }
 
-function createBale(baleData, position) {
+function createBale(baleData) {
     const bale = new THREE.Mesh(baleGeometry, baleMaterial.clone());
-    bale.position.copy(position);
+    bale.position.set(baleData.position_x, baleData.position_y, baleData.position_z);
 
     bale.rotation.y = Math.PI / 2;
     bale.castShadow = true;
     bale.receiveShadow = true;
 
     bale.userData = { 
-        cpNumber: baleData.cp, 
-        vehicleNumber: 'N/A',
+        id: baleData.id,
+        cpNumber: baleData.cp_number, 
+        vehicleNumber: baleData.vehicle_number,
+        warehouse_no: baleData.warehouse_no,
+        arrival_date: baleData.arrival_date,
+        supplier: baleData.supplier,
+        total_weight: baleData.total_weight,
+        no_of_bales: baleData.no_of_bales,
+        container_no: baleData.container_no,
         originalEmissive: bale.material.emissive.getHex()
     };
 
-    const cpPrefix = baleData.cp.split('-')[0];
-    const ribbonColor = getCpColor(cpPrefix);
+    const ribbonColor = getContainerColor(baleData.container_no);
     const ribbonHeight = 0.5;
     const ribbonGeometry = new THREE.BoxGeometry(BALE_WIDTH + 0.02, ribbonHeight, BALE_DEPTH + 0.02);
     const ribbonMaterial = new THREE.MeshBasicMaterial({ color: ribbonColor });
@@ -151,57 +165,39 @@ function createBale(baleData, position) {
 }
 
 async function loadBales() {
-    const savedLayout = localStorage.getItem('warehouseLayout');
+    console.log("Fetching layout from Supabase...");
+    let { data: balesData, error } = await db.from('bales').select('*');
 
-    let layoutData;
-    if (savedLayout) {
-        console.log("Found saved layout in localStorage. Loading...");
-        layoutData = JSON.parse(savedLayout);
+    if (error) {
+        console.error("Error fetching bales:", error);
+        return;
+    }
+
+    if (balesData) {
+        console.log("Found", balesData.length, "bales in Supabase.");
+        balesData.forEach(baleData => createBale(baleData));
+    }
+}
+
+
+async function updateBalePosition(bale) {
+    console.log(`Updating bale ${bale.userData.id} in Supabase...`);
+    const { error } = await db
+        .from('bales')
+        .update({ 
+            position_x: bale.position.x,
+            position_y: bale.position.y,
+            position_z: bale.position.z
+         })
+        .eq('id', bale.userData.id);
+
+    if (error) {
+        console.error("Error updating bale position:", error);
     } else {
-        console.log("No saved layout found. Loading from bales.json...");
-        const response = await fetch('bales.json');
-        layoutData = await response.json();
+        console.log("Bale position updated successfully.");
     }
-
-    layoutData.forEach(stackData => {
-        stackData.bales.forEach((baleData, index) => {
-            const position = new THREE.Vector3(
-                stackData.position.x,
-                (index * BALE_HEIGHT) + (BALE_HEIGHT / 2),
-                stackData.position.z
-            );
-            createBale(baleData, position);
-        });
-    });
 }
 
-function saveLayout() {
-    console.log("Saving layout to localStorage...");
-    const stacksMap = new Map();
-
-    bales.forEach(bale => {
-        const key = `${bale.position.x},${bale.position.z}`;
-        if (!stacksMap.has(key)) {
-            stacksMap.set(key, []);
-        }
-        stacksMap.get(key).push(bale);
-    });
-
-    const layoutData = [];
-    for (const stackBales of stacksMap.values()) {
-        stackBales.sort((a, b) => a.position.y - b.position.y);
-
-        const pos = stackBales[0].position;
-        layoutData.push({
-            id: layoutData.length + 1,
-            position: { x: pos.x, z: pos.z },
-            bales: stackBales.map(b => ({ cp: b.userData.cpNumber }))
-        });
-    }
-
-    localStorage.setItem('warehouseLayout', JSON.stringify(layoutData));
-    console.log("Layout saved.");
-}
 
 // --- INTERACTION ---
 const raycaster = new THREE.Raycaster();
@@ -216,16 +212,14 @@ const dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 const infoBox = document.getElementById('info-box');
 const cpNumberSpan = document.getElementById('cp-number');
 const vehicleNumberSpan = document.getElementById('vehicle-number');
+const warehouseNoSpan = document.getElementById('warehouse-no');
+const arrivalDateSpan = document.getElementById('arrival-date');
+const supplierSpan = document.getElementById('supplier');
+const totalWeightSpan = document.getElementById('total-weight');
+const noOfBalesSpan = document.getElementById('no-of-bales');
+const containerNoSpan = document.getElementById('container-no');
 const defaultInfoText = infoBox.querySelector('em');
 const changePosBtn = document.getElementById('change-position-btn');
-const resetLayoutBtn = document.getElementById('reset-layout-btn');
-
-resetLayoutBtn.addEventListener('click', () => {
-    if (confirm("Are you sure you want to reset the layout? All changes will be lost.")) {
-        localStorage.removeItem('warehouseLayout');
-        location.reload();
-    }
-});
 
 function onMouseMove(event) {
     mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
@@ -273,7 +267,7 @@ function onMouseClick(event) {
             } else {
                 draggedBale.position.y = BALE_HEIGHT / 2;
             }
-            saveLayout(); // Save the layout after a successful move
+            updateBalePosition(draggedBale); // Save the layout after a successful move
         } else {
             console.log("Stack is full! Reverting position.");
             draggedBale.position.copy(originalPosition);
@@ -338,8 +332,14 @@ changePosBtn.addEventListener('click', (event) => {
 });
 
 function showInfo(bale) {
-    cpNumberSpan.textContent = bale.userData.cpNumber;
-    vehicleNumberSpan.textContent = bale.userData.vehicleNumber;
+    cpNumberSpan.textContent = bale.userData.cpNumber || 'N/A';
+    vehicleNumberSpan.textContent = bale.userData.vehicleNumber || 'N/A';
+    warehouseNoSpan.textContent = bale.userData.warehouse_no || 'N/A';
+    arrivalDateSpan.textContent = bale.userData.arrival_date || 'N/A';
+    supplierSpan.textContent = bale.userData.supplier || 'N/A';
+    totalWeightSpan.textContent = bale.userData.total_weight || 'N/A';
+    noOfBalesSpan.textContent = bale.userData.no_of_bales || 'N/A';
+    containerNoSpan.textContent = bale.userData.container_no || 'N/A';
     defaultInfoText.style.display = 'none';
     changePosBtn.style.display = 'block';
 }
@@ -347,6 +347,12 @@ function showInfo(bale) {
 function hideInfo() {
     cpNumberSpan.textContent = 'N/A';
     vehicleNumberSpan.textContent = 'N/A';
+    warehouseNoSpan.textContent = 'N/A';
+    arrivalDateSpan.textContent = 'N/A';
+    supplierSpan.textContent = 'N/A';
+    totalWeightSpan.textContent = 'N/A';
+    noOfBalesSpan.textContent = 'N/A';
+    containerNoSpan.textContent = 'N/A';
     defaultInfoText.style.display = 'block';
     changePosBtn.style.display = 'none';
 }
