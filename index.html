@@ -4,16 +4,22 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>3D Warehouse Viewer</title>
-    <link rel="stylesheet" href="style.css">
+        <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
     <div id="controls-container">
-        <button id="reset-layout-btn">Reset Layout</button>
     </div>
     <div id="info-box">
         <h2>Bale Information</h2>
         <p><strong>CP Number:</strong> <span id="cp-number">N/A</span></p>
         <p><strong>Vehicle Number:</strong> <span id="vehicle-number">N/A</span></p>
+        <p><strong>Warehouse No:</strong> <span id="warehouse-no">N/A</span></p>
+        <p><strong>Arrival Date:</strong> <span id="arrival-date">N/A</span></p>
+        <p><strong>Supplier:</strong> <span id="supplier">N/A</span></p>
+        <p><strong>Total Weight:</strong> <span id="total-weight">N/A</span></p>
+        <p><strong>No. of Bales:</strong> <span id="no-of-bales">N/A</span></p>
+        <p><strong>Container No:</strong> <span id="container-no">N/A</span></p>
         <p><em>Click on a bale to see its details.</em></p>
         <button id="change-position-btn" style="display: none;">Change Position</button>
     </div>
