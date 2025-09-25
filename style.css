@@ -70,6 +70,66 @@ canvas {
     transition: background-color 0.2s;
 }
 
+#vehicle-filter-box {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background-color: rgba(255, 255, 255, 0.9);
+    padding: 15px 25px;
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    width: 280px;
+    border: 1px solid #ddd;
+}
+
+#vehicle-filter-box h2 {
+    margin-top: 0;
+    margin-bottom: 10px;
+    font-size: 1.2em;
+    color: #0056b3;
+}
+
+#vehicle-info-box {
+    position: absolute;
+    top: 300px; /* Adjust as needed */
+    right: 20px;
+    background-color: rgba(255, 255, 255, 0.9);
+    padding: 15px 25px;
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    width: 280px;
+    border: 1px solid #ddd;
+}
+
+#vehicle-info-box h2 {
+    margin-top: 0;
+    margin-bottom: 10px;
+    font-size: 1.2em;
+    color: #0056b3;
+}
+
+#vehicle-info-box p {
+    margin: 5px 0;
+}
+
+#vehicle-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+#vehicle-list li {
+    padding: 8px;
+    cursor: pointer;
+    border-bottom: 1px solid #eee;
+}
+
+#vehicle-list li:hover, #vehicle-list li.active {
+    background-color: #e9ecef;
+}
+
 #change-position-btn:hover, #isolate-stack-btn:hover {
     background-color: #0056b3;
 }
