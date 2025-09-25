@@ -70,6 +70,18 @@ canvas {
     transition: background-color 0.2s;
 }
 
-#change-position-btn:hover {
+#change-position-btn:hover, #isolate-stack-btn:hover {
     background-color: #0056b3;
+}
+
+#isolate-stack-btn {
+    background-color: #17a2b8;
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 5px;
+    cursor: pointer;
+    margin-top: 10px;
+    width: 100%;
+    transition: background-color 0.2s;
 }
