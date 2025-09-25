@@ -120,13 +120,25 @@ const colorPalette = [
 ];
 let nextColorIndex = 0;
 
+// Simple hash function for strings to get a deterministic color index
+function simpleHash(str) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        const char = str.charCodeAt(i);
+        hash = (hash << 5) - hash + char;
+        hash |= 0; // Convert to 32bit integer
+    }
+    return Math.abs(hash);
+}
+
 function getContainerColor(containerNo) {
     if (!containerNo) {
         return 0x808080; // Return a default color like grey if container_no is null or undefined
     }
     if (!containerColorMap.has(containerNo)) {
-        containerColorMap.set(containerNo, colorPalette[nextColorIndex % colorPalette.length]);
-        nextColorIndex++;
+        const hash = simpleHash(containerNo);
+        const colorIndex = hash % colorPalette.length;
+        containerColorMap.set(containerNo, colorPalette[colorIndex]);
     }
     return containerColorMap.get(containerNo);
 }
@@ -176,7 +188,39 @@ async function loadBales() {
     if (balesData) {
         console.log("Found", balesData.length, "bales in Supabase.");
         balesData.forEach(baleData => createBale(baleData));
+        updateStackCounters(); // Initial creation of stack counters
     }
+}
+
+function updateStackCounters() {
+    // Clear existing placards
+    stackCounterPlacards.forEach(placard => scene.remove(placard));
+    stackCounterPlacards.clear();
+
+    // Group bales by stack
+    const stacks = new Map();
+    bales.forEach(bale => {
+        const key = `${bale.position.x}_${bale.position.z}`;
+        if (!stacks.has(key)) {
+            stacks.set(key, []);
+        }
+        stacks.get(key).push(bale);
+    });
+
+    // Create placards for each stack
+    stacks.forEach(stackBales => {
+        const count = stackBales.length;
+        if (count > 0) {
+            const topBale = stackBales.reduce((max, b) => b.position.y > max.position.y ? b : max, stackBales[0]);
+            const containerNo = topBale.userData.container_no;
+            const placard = createStackCountCard(count, containerNo);
+            placard.position.set(topBale.position.x, topBale.position.y + BALE_HEIGHT * 1.2, topBale.position.z);
+            
+            const key = `${topBale.position.x}_${topBale.position.z}`;
+            stackCounterPlacards.set(key, placard);
+            scene.add(placard);
+        }
+    });
 }
 
 
@@ -220,6 +264,48 @@ const noOfBalesSpan = document.getElementById('no-of-bales');
 const containerNoSpan = document.getElementById('container-no');
 const defaultInfoText = infoBox.querySelector('em');
 const changePosBtn = document.getElementById('change-position-btn');
+const isolateStackBtn = document.getElementById('isolate-stack-btn');
+
+let isolatedStackKey = null;
+
+// --- STACK COUNTER --- 
+const stackCounterPlacards = new Map(); // key: x_z, value: THREE.Object3D
+
+function createStackCountCard(count, containerNo) {
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    const size = 256;
+    canvas.width = size;
+    canvas.height = size;
+
+    // Background
+    context.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    context.fillRect(0, 0, size, size);
+
+    // Title
+    context.fillStyle = '#00aaff'; // Light blue for the title
+    context.font = 'bold 40px Arial';
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.fillText('Stack Info', size / 2, size / 2 - 80);
+
+    // Bale Count
+    context.fillStyle = 'white';
+    context.font = '50px Arial';
+    context.fillText(`Bales: ${count}`, size / 2, size / 2 - 10);
+
+    // Container Number
+    context.font = '50px Arial';
+    context.fillText(`Cont: ${containerNo || 'N/A'}`, size / 2, size / 2 + 50);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    const material = new THREE.SpriteMaterial({ map: texture });
+    const sprite = new THREE.Sprite(material);
+    sprite.scale.set(6, 6, 1); // Adjusted scale
+
+    return sprite;
+}
+
 
 function onMouseMove(event) {
     mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
@@ -272,6 +358,8 @@ function onMouseClick(event) {
             console.log("Stack is full! Reverting position.");
             draggedBale.position.copy(originalPosition);
         }
+
+        updateStackCounters(); // Update counters after move
 
         draggedBale.material.emissive.setHex(draggedBale.userData.originalEmissive);
         draggedBale = null;
@@ -331,6 +419,37 @@ changePosBtn.addEventListener('click', (event) => {
     }
 });
 
+isolateStackBtn.addEventListener('click', (event) => {
+    event.stopPropagation();
+    if (selectedBale) {
+        const stackKey = `${selectedBale.position.x}_${selectedBale.position.z}`;
+        toggleIsolation(stackKey);
+    }
+});
+
+function toggleIsolation(stackKey) {
+    if (isolatedStackKey === stackKey) {
+        // Disable isolation
+        isolatedStackKey = null;
+        isolateStackBtn.textContent = 'Isolate Stack';
+        isolateStackBtn.style.backgroundColor = '#17a2b8';
+        bales.forEach(b => b.visible = true);
+        stackCounterPlacards.forEach(p => p.visible = true);
+    } else {
+        // Enable isolation
+        isolatedStackKey = stackKey;
+        isolateStackBtn.textContent = 'Show All Stacks';
+        isolateStackBtn.style.backgroundColor = '#28a745';
+        bales.forEach(bale => {
+            const currentStackKey = `${bale.position.x}_${bale.position.z}`;
+            bale.visible = currentStackKey === stackKey;
+        });
+        stackCounterPlacards.forEach((placard, key) => {
+            placard.visible = key === stackKey;
+        });
+    }
+}
+
 function showInfo(bale) {
     cpNumberSpan.textContent = bale.userData.cpNumber || 'N/A';
     vehicleNumberSpan.textContent = bale.userData.vehicleNumber || 'N/A';
@@ -342,6 +461,7 @@ function showInfo(bale) {
     containerNoSpan.textContent = bale.userData.container_no || 'N/A';
     defaultInfoText.style.display = 'none';
     changePosBtn.style.display = 'block';
+    isolateStackBtn.style.display = 'block';
 }
 
 function hideInfo() {
@@ -355,6 +475,11 @@ function hideInfo() {
     containerNoSpan.textContent = 'N/A';
     defaultInfoText.style.display = 'block';
     changePosBtn.style.display = 'none';
+    isolateStackBtn.style.display = 'none';
+
+    if (isolatedStackKey) {
+        toggleIsolation(isolatedStackKey); // This will disable isolation
+    }
 }
 
 // --- RESIZE HANDLING ---
