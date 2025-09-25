@@ -103,6 +103,7 @@ const baleGeometry = new THREE.BoxGeometry(BALE_WIDTH, BALE_HEIGHT, BALE_DEPTH);
 const baleMaterial = new THREE.MeshStandardMaterial({ color: 0xdaa520 }); // Goldenrod
 
 const bales = [];
+const stackCounterPlacards = new Map(); // key: x_z, value: THREE.Object3D
 
 // --- RIBBON COLOR LOGIC ---
 const containerColorMap = new Map();
@@ -186,10 +187,72 @@ async function loadBales() {
     }
 
     if (balesData) {
+        console.log("Bales data from Supabase:", balesData);
         console.log("Found", balesData.length, "bales in Supabase.");
         balesData.forEach(baleData => createBale(baleData));
         updateStackCounters(); // Initial creation of stack counters
+        populateVehicleFilter(); // Populate the vehicle filter UI
     }
+}
+
+function filterByVehicle(vehicleAndContainerNo) {
+    activeVehicleFilter = vehicleAndContainerNo;
+
+    if (!vehicleAndContainerNo) { // Handles "Show All"
+        bales.forEach(bale => bale.visible = true);
+        hideVehicleInfo();
+    } else {
+        const [vehicleNo, containerNo] = vehicleAndContainerNo.split(' - ');
+        bales.forEach(bale => {
+            bale.visible = bale.userData.vehicleNumber === vehicleNo && bale.userData.container_no === containerNo;
+        });
+        showVehicleInfo();
+    }
+
+    updateStackCounters();
+}
+
+function createStackCountCard(count, containerNo) {
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    const text = `${count} Bales`;
+    const containerText = `Cont: ${containerNo || 'N/A'}`;
+
+    // Set a higher resolution for the canvas
+    const canvasWidth = 180;
+    const canvasHeight = 90;
+    canvas.width = canvasWidth;
+    canvas.height = canvasHeight;
+
+    // Background
+    context.fillStyle = 'rgba(255, 255, 255, 0.8)';
+    context.fillRect(0, 0, canvasWidth, canvasHeight);
+
+    // Border
+    context.strokeStyle = '#000';
+    context.lineWidth = 4;
+    context.strokeRect(0, 0, canvasWidth, canvasHeight);
+
+    // Text styling
+    context.fillStyle = '#000';
+    context.font = 'bold 30px Arial';
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+
+    // Draw text
+    context.fillText(text, canvasWidth / 2, canvasHeight / 2 - 15);
+    context.font = '24px Arial';
+    context.fillText(containerText, canvasWidth / 2, canvasHeight / 2 + 20);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    const material = new THREE.MeshBasicMaterial({ map: texture, transparent: true });
+    const geometry = new THREE.PlaneGeometry(7, 3.5);
+    const card = new THREE.Mesh(geometry, material);
+
+    // Make sure the card always faces the camera
+    card.lookAt(camera.position);
+
+    return card;
 }
 
 function updateStackCounters() {
@@ -197,9 +260,10 @@ function updateStackCounters() {
     stackCounterPlacards.forEach(placard => scene.remove(placard));
     stackCounterPlacards.clear();
 
-    // Group bales by stack
+    // Group bales by stack (only visible bales)
     const stacks = new Map();
-    bales.forEach(bale => {
+    const visibleBales = bales.filter(b => b.visible);
+    visibleBales.forEach(bale => {
         const key = `${bale.position.x}_${bale.position.z}`;
         if (!stacks.has(key)) {
             stacks.set(key, []);
@@ -266,46 +330,68 @@ const defaultInfoText = infoBox.querySelector('em');
 const changePosBtn = document.getElementById('change-position-btn');
 const isolateStackBtn = document.getElementById('isolate-stack-btn');
 
+const vehicleInfoBox = document.getElementById('vehicle-info-box');
+const vehicleArrivalDateSpan = document.getElementById('vehicle-arrival-date');
+const vehicleSupplierSpan = document.getElementById('vehicle-supplier');
+const vehicleTotalWeightSpan = document.getElementById('vehicle-total-weight');
+const vehicleContainerNoSpan = document.getElementById('vehicle-container-no');
+const vehicleWarehouseNoSpan = document.getElementById('vehicle-warehouse-no');
+const vehicleNoOfBalesSpan = document.getElementById('vehicle-no-of-bales');
+
 let isolatedStackKey = null;
+let activeVehicleFilter = null;
 
-// --- STACK COUNTER --- 
-const stackCounterPlacards = new Map(); // key: x_z, value: THREE.Object3D
+function showVehicleInfo() {
+    const visibleBales = bales.filter(b => b.visible);
+    if (visibleBales.length > 0) {
+        const firstBale = visibleBales[0];
+        vehicleArrivalDateSpan.textContent = firstBale.userData.arrival_date || 'N/A';
+        vehicleSupplierSpan.textContent = firstBale.userData.supplier || 'N/A';
+        vehicleTotalWeightSpan.textContent = firstBale.userData.total_weight || 'N/A';
+        vehicleContainerNoSpan.textContent = firstBale.userData.container_no || 'N/A';
+        vehicleWarehouseNoSpan.textContent = firstBale.userData.warehouse_no || 'N/A';
+        vehicleNoOfBalesSpan.textContent = visibleBales.length;
 
-function createStackCountCard(count, containerNo) {
-    const canvas = document.createElement('canvas');
-    const context = canvas.getContext('2d');
-    const size = 256;
-    canvas.width = size;
-    canvas.height = size;
-
-    // Background
-    context.fillStyle = 'rgba(0, 0, 0, 0.7)';
-    context.fillRect(0, 0, size, size);
-
-    // Title
-    context.fillStyle = '#00aaff'; // Light blue for the title
-    context.font = 'bold 40px Arial';
-    context.textAlign = 'center';
-    context.textBaseline = 'middle';
-    context.fillText('Stack Info', size / 2, size / 2 - 80);
-
-    // Bale Count
-    context.fillStyle = 'white';
-    context.font = '50px Arial';
-    context.fillText(`Bales: ${count}`, size / 2, size / 2 - 10);
-
-    // Container Number
-    context.font = '50px Arial';
-    context.fillText(`Cont: ${containerNo || 'N/A'}`, size / 2, size / 2 + 50);
-
-    const texture = new THREE.CanvasTexture(canvas);
-    const material = new THREE.SpriteMaterial({ map: texture });
-    const sprite = new THREE.Sprite(material);
-    sprite.scale.set(6, 6, 1); // Adjusted scale
-
-    return sprite;
+        vehicleInfoBox.style.display = 'block';
+    }
 }
 
+function hideVehicleInfo() {
+    vehicleInfoBox.style.display = 'none';
+}
+
+function populateVehicleFilter() {
+    const vehicleList = document.getElementById('vehicle-list');
+    const vehicleAndContainerNumbers = [...new Set(bales.map(b => {
+        if (b.userData.vehicleNumber && b.userData.container_no) {
+            return `${b.userData.vehicleNumber} - ${b.userData.container_no}`;
+        }
+        return null;
+    }).filter(Boolean))];
+
+    // Add "Show All" option
+    const showAllLi = document.createElement('li');
+    showAllLi.textContent = 'Show All';
+    showAllLi.classList.add('active');
+    showAllLi.addEventListener('click', () => {
+        filterByVehicle(null);
+        document.querySelectorAll('#vehicle-list li').forEach(li => li.classList.remove('active'));
+        showAllLi.classList.add('active');
+    });
+    vehicleList.appendChild(showAllLi);
+
+    // Add vehicle and container numbers
+    vehicleAndContainerNumbers.forEach(vehicleAndContainerNo => {
+        const li = document.createElement('li');
+        li.textContent = vehicleAndContainerNo;
+        li.addEventListener('click', () => {
+            filterByVehicle(vehicleAndContainerNo);
+            document.querySelectorAll('#vehicle-list li').forEach(li => li.classList.remove('active'));
+            li.classList.add('active');
+        });
+        vehicleList.appendChild(li);
+    });
+}
 
 function onMouseMove(event) {
     mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
@@ -497,6 +583,12 @@ window.addEventListener('mousemove', onMouseMove);
 function animate() {
     requestAnimationFrame(animate);
     controls.update();
+
+    // Make placards face the camera
+    stackCounterPlacards.forEach(placard => {
+        placard.lookAt(camera.position);
+    });
+
     renderer.render(scene, camera);
 }
 
