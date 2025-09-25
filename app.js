@@ -191,25 +191,21 @@ async function loadBales() {
         console.log("Found", balesData.length, "bales in Supabase.");
         balesData.forEach(baleData => createBale(baleData));
         updateStackCounters(); // Initial creation of stack counters
-        populateVehicleFilter(); // Populate the vehicle filter UI
+        populateVehicleDropdown(); // Populate the vehicle filter UI
+        populateCpNumberDropdown();
     }
 }
 
 function filterByVehicle(vehicleAndContainerNo) {
     activeVehicleFilter = vehicleAndContainerNo;
 
-    if (!vehicleAndContainerNo) { // Handles "Show All"
-        bales.forEach(bale => bale.visible = true);
+    if (!vehicleAndContainerNo) {
         hideVehicleInfo();
     } else {
-        const [vehicleNo, containerNo] = vehicleAndContainerNo.split(' - ');
-        bales.forEach(bale => {
-            bale.visible = bale.userData.vehicleNumber === vehicleNo && bale.userData.container_no === containerNo;
-        });
-        showVehicleInfo();
+        showVehicleInfo(vehicleAndContainerNo);
     }
 
-    updateStackCounters();
+    applyFilters();
 }
 
 function createStackCountCard(count, containerNo) {
@@ -330,6 +326,13 @@ const defaultInfoText = infoBox.querySelector('em');
 const changePosBtn = document.getElementById('change-position-btn');
 const isolateStackBtn = document.getElementById('isolate-stack-btn');
 
+const filterPane = document.getElementById('filter-pane');
+const toggleFilterPaneBtn = document.getElementById('toggle-filter-pane-btn');
+const vehicleSelect = document.getElementById('vehicle-select');
+const cpNumberSelect = document.getElementById('cp-number-select');
+const applyFiltersBtn = document.getElementById('apply-filters-btn');
+const clearFiltersBtn = document.getElementById('clear-filters-btn');
+
 const vehicleInfoBox = document.getElementById('vehicle-info-box');
 const vehicleArrivalDateSpan = document.getElementById('vehicle-arrival-date');
 const vehicleSupplierSpan = document.getElementById('vehicle-supplier');
@@ -339,29 +342,18 @@ const vehicleWarehouseNoSpan = document.getElementById('vehicle-warehouse-no');
 const vehicleNoOfBalesSpan = document.getElementById('vehicle-no-of-bales');
 
 let isolatedStackKey = null;
-let activeVehicleFilter = null;
 
-function showVehicleInfo() {
-    const visibleBales = bales.filter(b => b.visible);
-    if (visibleBales.length > 0) {
-        const firstBale = visibleBales[0];
-        vehicleArrivalDateSpan.textContent = firstBale.userData.arrival_date || 'N/A';
-        vehicleSupplierSpan.textContent = firstBale.userData.supplier || 'N/A';
-        vehicleTotalWeightSpan.textContent = firstBale.userData.total_weight || 'N/A';
-        vehicleContainerNoSpan.textContent = firstBale.userData.container_no || 'N/A';
-        vehicleWarehouseNoSpan.textContent = firstBale.userData.warehouse_no || 'N/A';
-        vehicleNoOfBalesSpan.textContent = visibleBales.length;
-
-        vehicleInfoBox.style.display = 'block';
+// --- Filter Pane Logic ---
+toggleFilterPaneBtn.addEventListener('click', () => {
+    filterPane.classList.toggle('collapsed');
+    if (filterPane.classList.contains('collapsed')) {
+        toggleFilterPaneBtn.textContent = '<';
+    } else {
+        toggleFilterPaneBtn.textContent = '>';
     }
-}
+});
 
-function hideVehicleInfo() {
-    vehicleInfoBox.style.display = 'none';
-}
-
-function populateVehicleFilter() {
-    const vehicleList = document.getElementById('vehicle-list');
+function populateVehicleDropdown() {
     const vehicleAndContainerNumbers = [...new Set(bales.map(b => {
         if (b.userData.vehicleNumber && b.userData.container_no) {
             return `${b.userData.vehicleNumber} - ${b.userData.container_no}`;
@@ -369,29 +361,110 @@ function populateVehicleFilter() {
         return null;
     }).filter(Boolean))];
 
-    // Add "Show All" option
-    const showAllLi = document.createElement('li');
-    showAllLi.textContent = 'Show All';
-    showAllLi.classList.add('active');
-    showAllLi.addEventListener('click', () => {
-        filterByVehicle(null);
-        document.querySelectorAll('#vehicle-list li').forEach(li => li.classList.remove('active'));
-        showAllLi.classList.add('active');
-    });
-    vehicleList.appendChild(showAllLi);
-
-    // Add vehicle and container numbers
-    vehicleAndContainerNumbers.forEach(vehicleAndContainerNo => {
-        const li = document.createElement('li');
-        li.textContent = vehicleAndContainerNo;
-        li.addEventListener('click', () => {
-            filterByVehicle(vehicleAndContainerNo);
-            document.querySelectorAll('#vehicle-list li').forEach(li => li.classList.remove('active'));
-            li.classList.add('active');
-        });
-        vehicleList.appendChild(li);
+    vehicleAndContainerNumbers.forEach(item => {
+        const option = document.createElement('option');
+        option.value = item;
+        option.textContent = item;
+        vehicleSelect.appendChild(option);
     });
 }
+
+function populateCpNumberDropdown() {
+    const cpNumberPrefixes = [...new Set(bales.map(b => {
+        if (b.userData.cpNumber) {
+            return b.userData.cpNumber.split('-')[0].trim();
+        }
+        return null;
+    }).filter(Boolean))];
+
+    cpNumberPrefixes.forEach(prefix => {
+        const option = document.createElement('option');
+        option.value = prefix;
+        option.textContent = prefix;
+        cpNumberSelect.appendChild(option);
+    });
+}
+
+function updateActiveFiltersBadge() {
+    const badge = document.getElementById('active-filters-badge');
+    let count = 0;
+    if (vehicleSelect.value) {
+        count++;
+    }
+    if (cpNumberSelect.value) {
+        count++;
+    }
+    badge.textContent = count;
+    badge.style.display = count > 0 ? 'inline-block' : 'none';
+}
+
+function showVehicleInfo(vehicleAndContainerNo) {
+    if (!vehicleAndContainerNo) {
+        vehicleInfoBox.style.display = 'none';
+        return;
+    }
+
+    const [vehicleNo, containerNo] = vehicleAndContainerNo.split(' - ');
+    const balesForVehicle = bales.filter(b => b.userData.vehicleNumber === vehicleNo && b.userData.container_no === containerNo);
+
+    if (balesForVehicle.length > 0) {
+        const firstBale = balesForVehicle[0];
+        vehicleArrivalDateSpan.textContent = firstBale.userData.arrival_date || 'N/A';
+        vehicleSupplierSpan.textContent = firstBale.userData.supplier || 'N/A';
+        vehicleTotalWeightSpan.textContent = firstBale.userData.total_weight || 'N/A';
+        vehicleContainerNoSpan.textContent = firstBale.userData.container_no || 'N/A';
+        vehicleWarehouseNoSpan.textContent = firstBale.userData.warehouse_no || 'N/A';
+        vehicleNoOfBalesSpan.textContent = balesForVehicle.length;
+
+        vehicleInfoBox.style.display = 'block';
+    } else {
+        vehicleInfoBox.style.display = 'none';
+    }
+}
+
+vehicleSelect.addEventListener('change', () => {
+    showVehicleInfo(vehicleSelect.value);
+});
+
+applyFiltersBtn.addEventListener('click', () => {
+    const selectedVehicle = vehicleSelect.value;
+    const selectedCpNumber = cpNumberSelect.value;
+
+    bales.forEach(bale => {
+        let vehicleMatch = true;
+        if (selectedVehicle) {
+            const [vehicleNo, containerNo] = selectedVehicle.split(' - ');
+            vehicleMatch = bale.userData.vehicleNumber === vehicleNo && bale.userData.container_no === containerNo;
+        }
+
+        let cpNumberMatch = true;
+        if (selectedCpNumber) {
+            if (bale.userData.cpNumber) {
+                cpNumberMatch = bale.userData.cpNumber.startsWith(selectedCpNumber);
+            } else {
+                cpNumberMatch = false;
+            }
+        }
+
+        bale.visible = vehicleMatch && cpNumberMatch;
+    });
+
+    updateStackCounters();
+    updateActiveFiltersBadge();
+});
+
+clearFiltersBtn.addEventListener('click', () => {
+    vehicleSelect.value = '';
+    cpNumberSelect.value = '';
+    showVehicleInfo(null);
+
+    bales.forEach(bale => {
+        bale.visible = true;
+    });
+
+    updateStackCounters();
+    updateActiveFiltersBadge();
+});
 
 function onMouseMove(event) {
     mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
