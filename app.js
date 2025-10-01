@@ -35,14 +35,14 @@ directionalLight.position.set(-100, 100, 50);
 directionalLight.castShadow = true;
 directionalLight.shadow.mapSize.width = 2048;
 directionalLight.shadow.mapSize.height = 2048;
-directionalLight.shadow.camera.left = -200;
-directionalLight.shadow.camera.right = 200;
+directionalLight.shadow.camera.left = -220;
+directionalLight.shadow.camera.right = 220;
 directionalLight.shadow.camera.top = 200;
 directionalLight.shadow.camera.bottom = -200;
 scene.add(directionalLight);
 
 // --- WAREHOUSE MODEL ---
-const WAREHOUSE_WIDTH = 170;
+const WAREHOUSE_WIDTH = 190;
 const WAREHOUSE_DEPTH = 40;
 
 // Floor
@@ -102,6 +102,12 @@ const MAX_STACK_HEIGHT = 5;
 const baleGeometry = new THREE.BoxGeometry(BALE_WIDTH, BALE_HEIGHT, BALE_DEPTH);
 const baleMaterial = new THREE.MeshStandardMaterial({ color: 0xdaa520 }); // Goldenrod
 
+// Bale orientation constants
+const BALE_ORIENTATION = {
+    HORIZONTAL: 0, // West-East (default)
+    VERTICAL: Math.PI / 2 // North-South
+};
+
 const bales = [];
 const stackCounterPlacards = new Map(); // key: x_z, value: THREE.Object3D
 
@@ -148,7 +154,9 @@ function createBale(baleData) {
     const bale = new THREE.Mesh(baleGeometry, baleMaterial.clone());
     bale.position.set(baleData.position_x, baleData.position_y, baleData.position_z);
 
-    bale.rotation.y = Math.PI / 2;
+    // Set initial rotation based on stored orientation or default to horizontal
+    const orientation = baleData.orientation !== undefined ? baleData.orientation : BALE_ORIENTATION.HORIZONTAL;
+    bale.rotation.y = Math.PI / 2 + orientation;
     bale.castShadow = true;
     bale.receiveShadow = true;
 
@@ -162,6 +170,7 @@ function createBale(baleData) {
         total_weight: baleData.total_weight,
         no_of_bales: baleData.no_of_bales,
         container_no: baleData.container_no,
+        orientation: orientation,
         originalEmissive: bale.material.emissive.getHex()
     };
 
@@ -183,16 +192,77 @@ async function loadBales() {
 
     if (error) {
         console.error("Error fetching bales:", error);
+        // Try to load sample data if database fails
+        console.log("Attempting to load sample data...");
+        await loadSampleData();
         return;
     }
 
-    if (balesData) {
+    if (balesData && balesData.length > 0) {
         console.log("Bales data from Supabase:", balesData);
         console.log("Found", balesData.length, "bales in Supabase.");
         balesData.forEach(baleData => createBale(baleData));
         updateStackCounters(); // Initial creation of stack counters
         populateVehicleDropdown(); // Populate the vehicle filter UI
         populateCpNumberDropdown();
+    } else {
+        console.log("No bales found in Supabase. Loading sample data...");
+        await loadSampleData();
+    }
+}
+
+async function loadSampleData() {
+    try {
+        const response = await fetch('./bales.json');
+        const sampleData = await response.json();
+        
+        console.log("Sample data loaded:", sampleData);
+        
+        // Convert sample data to proper bale format and insert into database
+        const bales = [];
+        let baleId = 1;
+        
+        sampleData.forEach(stack => {
+            stack.bales.forEach((bale, index) => {
+                const baleData = {
+                    id: baleId++,
+                    position_x: stack.position.x,
+                    position_y: (index * 3) + 1.5, // Stack height
+                    position_z: stack.position.z,
+                    orientation: 0, // Default horizontal
+                    cp_number: bale.cp,
+                    vehicle_number: `VEH-${stack.id}`,
+                    warehouse_no: 6,
+                    arrival_date: '2024-01-15',
+                    supplier: 'Sample Supplier',
+                    total_weight: '500kg',
+                    no_of_bales: stack.bales.length,
+                    container_no: `CONT-${stack.id}`
+                };
+                bales.push(baleData);
+            });
+        });
+        
+        // Insert sample data into Supabase
+        const { error: insertError } = await db.from('bales').insert(bales);
+        
+        if (insertError) {
+            console.error("Error inserting sample data:", insertError);
+            // Create bales anyway for display
+            bales.forEach(baleData => createBale(baleData));
+        } else {
+            console.log("Sample data inserted successfully. Reloading...");
+            // Reload from database
+            loadBales();
+            return;
+        }
+        
+        updateStackCounters();
+        populateVehicleDropdown();
+        populateCpNumberDropdown();
+        
+    } catch (fetchError) {
+        console.error("Error loading sample data:", fetchError);
     }
 }
 
@@ -291,14 +361,15 @@ async function updateBalePosition(bale) {
         .update({ 
             position_x: bale.position.x,
             position_y: bale.position.y,
-            position_z: bale.position.z
+            position_z: bale.position.z,
+            orientation: bale.userData.orientation
          })
         .eq('id', bale.userData.id);
 
     if (error) {
         console.error("Error updating bale position:", error);
     } else {
-        console.log("Bale position updated successfully.");
+        console.log("Bale position and orientation updated successfully.");
     }
 }
 
@@ -325,6 +396,8 @@ const containerNoSpan = document.getElementById('container-no');
 const defaultInfoText = infoBox.querySelector('em');
 const changePosBtn = document.getElementById('change-position-btn');
 const isolateStackBtn = document.getElementById('isolate-stack-btn');
+const rotateBaleBtn = document.getElementById('rotate-bale-btn');
+const keyboardHints = document.querySelector('.keyboard-hints');
 
 const filterPane = document.getElementById('filter-pane');
 const toggleFilterPaneBtn = document.getElementById('toggle-filter-pane-btn');
@@ -475,8 +548,15 @@ function onMouseMove(event) {
         const intersectionPoint = new THREE.Vector3();
         
         if (raycaster.ray.intersectPlane(dragPlane, intersectionPoint)) {
-            const snappedX = Math.round(intersectionPoint.x / BALE_DEPTH) * BALE_DEPTH;
-            const snappedZ = Math.round(intersectionPoint.z / BALE_WIDTH) * BALE_WIDTH;
+            // Determine grid size based on bale orientation
+            const isVertical = draggedBale.userData.orientation === BALE_ORIENTATION.VERTICAL;
+            // Vertical bales (North-South) use BALE_DEPTH for X-spacing, BALE_WIDTH for Z-spacing
+            // Horizontal bales (West-East) use BALE_WIDTH for X-spacing, BALE_DEPTH for Z-spacing
+            const snapX = isVertical ? BALE_DEPTH : BALE_WIDTH;
+            const snapZ = isVertical ? BALE_WIDTH : BALE_DEPTH;
+            
+            const snappedX = Math.round(intersectionPoint.x / snapX) * snapX;
+            const snappedZ = Math.round(intersectionPoint.z / snapZ) * snapZ;
             draggedBale.position.x = snappedX;
             draggedBale.position.z = snappedZ;
         }
@@ -492,27 +572,74 @@ function onMouseClick(event) {
         const targetX = draggedBale.position.x;
         const targetZ = draggedBale.position.z;
 
-        const balesAtTarget = otherBales.filter(b => 
-            Math.abs(b.position.x - targetX) < 0.1 && Math.abs(b.position.z - targetZ) < 0.1
-        );
+        // Advanced collision detection that properly handles bale orientations
+        const draggedIsVertical = draggedBale.userData.orientation === BALE_ORIENTATION.VERTICAL;
+        
+        // Calculate the dragged bale's footprint dimensions
+        const draggedFootprintX = draggedIsVertical ? BALE_DEPTH : BALE_WIDTH;
+        const draggedFootprintZ = draggedIsVertical ? BALE_WIDTH : BALE_DEPTH;
+        
+        const balesAtTarget = otherBales.filter(b => {
+            const existingIsVertical = b.userData.orientation === BALE_ORIENTATION.VERTICAL;
+            
+            // Calculate the existing bale's footprint dimensions
+            const existingFootprintX = existingIsVertical ? BALE_DEPTH : BALE_WIDTH;
+            const existingFootprintZ = existingIsVertical ? BALE_WIDTH : BALE_DEPTH;
+            
+            // Check if bales overlap using their actual footprints
+            // Two rectangles overlap if they overlap in both X and Z dimensions
+            const xOverlap = Math.abs(b.position.x - targetX) < (draggedFootprintX + existingFootprintX) / 2;
+            const zOverlap = Math.abs(b.position.z - targetZ) < (draggedFootprintZ + existingFootprintZ) / 2;
+            
+            return xOverlap && zOverlap;
+        });
+
+        console.log(`Checking stacking at position (${targetX}, ${targetZ})`);
+        console.log(`Dragged bale orientation: ${draggedIsVertical ? 'Vertical' : 'Horizontal'} (${draggedFootprintX}x${draggedFootprintZ})`);
+        console.log(`Found ${balesAtTarget.length} overlapping bales at target position`);
+        
+        // For proper stacking, we need to find bales that are close enough to stack on
+        // This handles cases where different orientations might not have exact position matches
+        const stackableBales = balesAtTarget.filter(b => {
+            // For stacking, bales should be reasonably close (within half a grid cell)
+            const maxStackingDistance = Math.max(BALE_WIDTH, BALE_DEPTH) / 2;
+            const distance = Math.sqrt(
+                Math.pow(b.position.x - targetX, 2) + 
+                Math.pow(b.position.z - targetZ, 2)
+            );
+            return distance <= maxStackingDistance;
+        });
+
+        console.log(`Found ${stackableBales.length} stackable bales (close enough for stacking)`);
 
         let topBale = null;
-        if (balesAtTarget.length > 0) {
-            topBale = balesAtTarget.reduce((max, b) => b.position.y > max.position.y ? b : max, balesAtTarget[0]);
+        if (stackableBales.length > 0) {
+            topBale = stackableBales.reduce((max, b) => b.position.y > max.position.y ? b : max, stackableBales[0]);
+            console.log(`Top stackable bale at height: ${topBale.position.y}`);
         }
 
         let stackHeight = 0;
         if (topBale) {
             stackHeight = Math.round((topBale.position.y + BALE_HEIGHT / 2) / BALE_HEIGHT);
+            console.log(`Calculated stack height: ${stackHeight}`);
         }
 
         if (stackHeight < MAX_STACK_HEIGHT) {
             if (topBale) {
-                draggedBale.position.set(topBale.position.x, topBale.position.y + BALE_HEIGHT, topBale.position.z);
+                const newY = topBale.position.y + BALE_HEIGHT;
+                console.log(`Stacking bale at height: ${newY}, aligning to position (${topBale.position.x}, ${topBale.position.z})`);
+                // Align the dropped bale to the center of the top bale for better stacking
+                draggedBale.position.set(topBale.position.x, newY, topBale.position.z);
             } else {
+                console.log(`Placing bale on ground at height: ${BALE_HEIGHT / 2}`);
                 draggedBale.position.y = BALE_HEIGHT / 2;
             }
-            updateBalePosition(draggedBale); // Save the layout after a successful move
+            // Save the layout after a successful move
+            updateBalePosition(draggedBale).then(() => {
+                console.log("Bale position saved successfully");
+            }).catch(error => {
+                console.error("Failed to save bale position:", error);
+            });
         } else {
             console.log("Stack is full! Reverting position.");
             draggedBale.position.copy(originalPosition);
@@ -578,6 +705,60 @@ changePosBtn.addEventListener('click', (event) => {
     }
 });
 
+rotateBaleBtn.addEventListener('click', (event) => {
+    event.stopPropagation();
+    
+    if (selectedBale) {
+        // Create smooth rotation animation
+        const currentOrientation = selectedBale.userData.orientation;
+        const newOrientation = currentOrientation === BALE_ORIENTATION.HORIZONTAL ? 
+                               BALE_ORIENTATION.VERTICAL : BALE_ORIENTATION.HORIZONTAL;
+        
+        // Store the new orientation
+        selectedBale.userData.orientation = newOrientation;
+        
+        // Animate the rotation with a premium feel
+        const startRotation = selectedBale.rotation.y;
+        const targetRotation = Math.PI / 2 + newOrientation;
+        const rotationDuration = 500; // milliseconds
+        const startTime = Date.now();
+        
+        // Add subtle bounce and glow effects during rotation
+        selectedBale.material.emissive.setHex(0x2a5aa8); // Blue glow during rotation
+        
+        function animateRotation() {
+            const elapsed = Date.now() - startTime;
+            const progress = Math.min(elapsed / rotationDuration, 1);
+            
+            // Smooth easing function (ease-out-back for premium feel)
+            const easeOutBack = (t) => {
+                const c1 = 1.70158;
+                const c3 = c1 + 1;
+                return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+            };
+            
+            const easedProgress = easeOutBack(progress);
+            selectedBale.rotation.y = startRotation + (targetRotation - startRotation) * easedProgress;
+            
+            if (progress < 1) {
+                requestAnimationFrame(animateRotation);
+            } else {
+                // Animation complete - restore original highlighting
+                selectedBale.material.emissive.setHex(0x555555);
+                updateBalePosition(selectedBale); // Save to database
+                updateStackCounters(); // Update visual counters
+                
+                // Update button text based on new orientation
+                const orientationText = newOrientation === BALE_ORIENTATION.HORIZONTAL ? 
+                                       'West-East' : 'North-South';
+                rotateBaleBtn.innerHTML = `<span class="rotate-icon">↻</span> Rotate (${orientationText})`;
+            }
+        }
+        
+        animateRotation();
+    }
+});
+
 isolateStackBtn.addEventListener('click', (event) => {
     event.stopPropagation();
     if (selectedBale) {
@@ -619,8 +800,15 @@ function showInfo(bale) {
     noOfBalesSpan.textContent = bale.userData.no_of_bales || 'N/A';
     containerNoSpan.textContent = bale.userData.container_no || 'N/A';
     defaultInfoText.style.display = 'none';
+    keyboardHints.style.display = 'block';
     changePosBtn.style.display = 'block';
     isolateStackBtn.style.display = 'block';
+    rotateBaleBtn.style.display = 'block';
+    
+    // Update rotate button text based on current orientation
+    const orientationText = bale.userData.orientation === BALE_ORIENTATION.HORIZONTAL ? 
+                           'West-East' : 'North-South';
+    rotateBaleBtn.innerHTML = `<span class="rotate-icon">↻</span> Rotate (${orientationText})`;
 }
 
 function hideInfo() {
@@ -633,8 +821,10 @@ function hideInfo() {
     noOfBalesSpan.textContent = 'N/A';
     containerNoSpan.textContent = 'N/A';
     defaultInfoText.style.display = 'block';
+    keyboardHints.style.display = 'none';
     changePosBtn.style.display = 'none';
     isolateStackBtn.style.display = 'none';
+    rotateBaleBtn.style.display = 'none';
 
     if (isolatedStackKey) {
         toggleIsolation(isolatedStackKey); // This will disable isolation
@@ -651,6 +841,33 @@ function onWindowResize() {
 window.addEventListener('resize', onWindowResize);
 window.addEventListener('click', onMouseClick);
 window.addEventListener('mousemove', onMouseMove);
+
+// Add keyboard shortcuts for premium UX
+window.addEventListener('keydown', (event) => {
+    if (selectedBale && !draggedBale) {
+        switch(event.key.toLowerCase()) {
+            case 'r':
+                event.preventDefault();
+                rotateBaleBtn.click();
+                break;
+            case 'm':
+                event.preventDefault();
+                changePosBtn.click();
+                break;
+            case 'i':
+                event.preventDefault();
+                isolateStackBtn.click();
+                break;
+            case 'escape':
+                if (selectedBale) {
+                    selectedBale.material.emissive.setHex(selectedBale.userData.originalEmissive);
+                    selectedBale = null;
+                    hideInfo();
+                }
+                break;
+        }
+    }
+});
 
 // --- ANIMATION LOOP ---
 function animate() {
