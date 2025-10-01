@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Warehouse Viewer</title>
+    <title>Warehouse no#6 Multan - 3D Viewer</title>
         <link rel="stylesheet" href="style.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -11,6 +11,7 @@
     <div id="controls-container">
     </div>
     <div id="info-box">
+        <h1 class="warehouse-title">Warehouse no#6 Multan</h1>
         <h2>Bale Information</h2>
         <p><strong>CP Number:</strong> <span id="cp-number">N/A</span></p>
         <p><strong>Vehicle Number:</strong> <span id="vehicle-number">N/A</span></p>
@@ -21,7 +22,11 @@
         <p><strong>No. of Bales:</strong> <span id="no-of-bales">N/A</span></p>
         <p><strong>Container No:</strong> <span id="container-no">N/A</span></p>
         <p><em>Click on a bale to see its details.</em></p>
+        <div class="keyboard-hints" style="display: none;">
+            <small><strong>Shortcuts:</strong> R - Rotate | M - Move | I - Isolate | Esc - Deselect</small>
+        </div>
         <button id="change-position-btn" style="display: none;">Change Position</button>
+        <button id="rotate-bale-btn" style="display: none;"><span class="rotate-icon">↻</span> Rotate (West-East)</button>
         <button id="isolate-stack-btn" style="display: none;">Isolate Stack</button>
     </div>
     <div id="filter-pane">
@@ -51,18 +56,4 @@
             </div>
             <div class="filter-actions">
                 <button id="apply-filters-btn">Apply</button>
-                <button id="clear-filters-btn">Clear All</button>
-            </div>
-        </div>
-    </div>
-    <script type="importmap">
-        {
-            "imports": {
-                "three": "https://unpkg.com/three@0.164.1/build/three.module.js",
-                "three/addons/": "https://unpkg.com/three@0.164.1/examples/jsm/"
-            }
-        }
-    </script>
-    <script type="module" src="app.js"></script>
-</body>
-</html>
+                <button id="clear-filters-btn">Clear All
