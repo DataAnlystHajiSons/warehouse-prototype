@@ -49,6 +49,23 @@ canvas {
     color: #0056b3;
 }
 
+.warehouse-title {
+    margin-top: 0;
+    margin-bottom: 15px;
+    font-size: 1.4em;
+    font-weight: 700;
+    color: #2c3e50;
+    text-align: center;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    border-bottom: 2px solid #e9ecef;
+    padding-bottom: 10px;
+    letter-spacing: 0.5px;
+}
+
 #info-box p {
     margin: 5px 0;
 }
@@ -155,30 +172,4 @@ canvas {
 }
 
 #vehicle-info-box {
-    margin-top: 20px;
-    padding: 15px;
-    background-color: #e9ecef;
-    border-radius: 5px;
-}
-
-#vehicle-info-box h2 {
-    font-size: 1.1em;
-    margin-bottom: 10px;
-}
-
-#vehicle-info-box p {
-    margin: 3px 0;
-    font-size: 0.9em;
-}
-
-#isolate-stack-btn {
-    background-color: #17a2b8;
-    color: white;
-    border: none;
-    padding: 8px 12px;
-    border-radius: 5px;
-    cursor: pointer;
-    margin-top: 10px;
-    width: 100%;
-    transition: background-color 0.2s;
-}
+    margin-to
