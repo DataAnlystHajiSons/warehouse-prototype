@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Warehouse Viewer</title>
+        <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <div id="controls-container">
+    </div>
+    <div id="info-box">
+        <h1 class="warehouse-title"></h1>
+        <h2>Bale Information</h2>
+        <p><strong>CP Number:</strong> <span id="cp-number">N/A</span></p>
+        <p><strong>Vehicle Number:</strong> <span id="vehicle-number">N/A</span></p>
+        <p><strong>Warehouse No:</strong> <span id="warehouse-no">N/A</span></p>
+        <p><strong>Arrival Date:</strong> <span id="arrival-date">N/A</span></p>
+        <p><strong>Supplier:</strong> <span id="supplier">N/A</span></p>
+        <p><strong>Total Weight:</strong> <span id="total-weight">N/A</span></p>
+        <p><strong>No. of Bales:</strong> <span id="no-of-bales">N/A</span></p>
+        <p><strong>Container No:</strong> <span id="container-no">N/A</span></p>
+        <p><em>Click on a bale to see its details.</em></p>
+        <div class="keyboard-hints" style="display: none;">
+            <small><strong>Shortcuts:</strong> R - Rotate | M - Move | I - Isolate | Esc - Deselect</small>
+        </div>
+        <button id="change-position-btn" style="display: none;">Change Position</button>
+        <button id="rotate-bale-btn" style="display: none;"><span class="rotate-icon">↻</span> Rotate (West-East)</button>
+        <button id="isolate-stack-btn" style="display: none;">Isolate Stack</button>
+    </div>
+    <div id="filter-pane">
+        <button id="toggle-filter-pane-btn">&gt;</button>
+        <div id="filter-content">
+            <h2>Filters <span id="active-filters-badge" class="badge" style="display: none;">0</span></h2>
+            <div class="filter-group">
+                <label for="vehicle-select">Vehicle - Container</label>
+                <select id="vehicle-select">
+                    <option value="">All</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label for="cp-number-select">CP Number</label>
+                <select id="cp-number-select">
+                    <option value="">All</option>
+                </select>
+            </div>
+            <div id="vehicle-info-box" style="display: none;">
+                <h2>Vehicle Information</h2>
+                <p><strong>Arrival Date:</strong> <span id="vehicle-arrival-date">N/A</span></p>
+                <p><strong>Supplier:</strong> <span id="vehicle-supplier">N/A</span></p>
+                <p><strong>Total Weight:</strong> <span id="vehicle-total-weight">N/A</span></p>
+                <p><strong>Container No:</strong> <span id="vehicle-container-no">N/A</span></p>
+                <p><strong>Warehouse No:</strong> <span id="vehicle-warehouse-no">N/A</span></p>
+                <p><strong>No. of Bales:</strong> <span id="vehicle-no-of-bales">N/A</span></p>
+            </div>
+            <div class="filter-actions">
+                <button id="apply-filters-btn">Apply</button>
+                <button id="clear-filters-btn">Clear All</button>
+            </div>
+        </div>
+    </div>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.164.1/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.164.1/examples/jsm/"
+            }
+        }
+    </script>
+    <script type="module" src="app.js"></script>
+</body>
+</html>
