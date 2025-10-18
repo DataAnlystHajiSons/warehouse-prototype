@@ -41,58 +41,81 @@ directionalLight.shadow.camera.top = 200;
 directionalLight.shadow.camera.bottom = -200;
 scene.add(directionalLight);
 
-// --- WAREHOUSE MODEL ---
-const WAREHOUSE_WIDTH = 190;
-const WAREHOUSE_DEPTH = 40;
+async function loadWarehouse() {
+    const response = await fetch('./warehouses.json');
+    const warehouses = await response.json();
+    const warehouseConfig = warehouses[warehouseId];
 
-// Floor
-const floorGeometry = new THREE.BoxGeometry(WAREHOUSE_WIDTH, 0.2, WAREHOUSE_DEPTH);
-const floorMaterial = new THREE.MeshStandardMaterial({ color: 0xcccccc });
-const floor = new THREE.Mesh(floorGeometry, floorMaterial);
-floor.receiveShadow = true;
-floor.position.y = -0.1;
-scene.add(floor);
+    if (!warehouseConfig) {
+        console.error(`Warehouse with id ${warehouseId} not found in warehouses.json`);
+        // redirect to selection page
+        window.location.href = 'index.html';
+        return;
+    }
 
-// Walls
-const WALL_HEIGHT = 20;
-const wallMaterial = new THREE.MeshStandardMaterial({ color: 0xf7f7f7 });
+    // Update the title
+    const warehouseTitle = document.querySelector('.warehouse-title');
+    if (warehouseTitle) {
+        warehouseTitle.textContent = warehouseConfig.name;
+    }
 
-const wallBack = new THREE.Mesh(
-    new THREE.BoxGeometry(WAREHOUSE_WIDTH, WALL_HEIGHT, 0.5),
-    wallMaterial
-);
-wallBack.position.set(0, WALL_HEIGHT / 2 - 0.1, -WAREHOUSE_DEPTH / 2);
-wallBack.receiveShadow = true;
-scene.add(wallBack);
+    createWarehouseModel(warehouseConfig);
+    loadBales();
+}
 
-const wallFront = new THREE.Mesh(
-    new THREE.BoxGeometry(WAREHOUSE_WIDTH, WALL_HEIGHT, 0.5),
-    wallMaterial
-);
-wallFront.position.set(0, WALL_HEIGHT / 2 - 0.1, WAREHOUSE_DEPTH / 2);
-wallFront.receiveShadow = true;
-// scene.add(wallFront); // Commented out for better visibility
+function createWarehouseModel(config) {
+    const WAREHOUSE_WIDTH = config.width;
+    const WAREHOUSE_DEPTH = config.depth;
+    const WALL_HEIGHT = 20; // This can also be moved to config if it varies
 
-// Left wall with gates
-const leftWallZPositions = [-12.5, 0, 12.5];
-const leftWallZSizes = [5, 15, 5];
-leftWallZPositions.forEach((zPos, i) => {
-    const wall = new THREE.Mesh(
-        new THREE.BoxGeometry(0.5, WALL_HEIGHT, leftWallZSizes[i]),
+    // Floor
+    const floorGeometry = new THREE.BoxGeometry(WAREHOUSE_WIDTH, 0.2, WAREHOUSE_DEPTH);
+    const floorMaterial = new THREE.MeshStandardMaterial({ color: 0xcccccc });
+    const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+    floor.receiveShadow = true;
+    floor.position.y = -0.1;
+    scene.add(floor);
+
+    // Walls
+    const wallMaterial = new THREE.MeshStandardMaterial({ color: 0xf7f7f7 });
+
+    const wallBack = new THREE.Mesh(
+        new THREE.BoxGeometry(WAREHOUSE_WIDTH, WALL_HEIGHT, 0.5),
         wallMaterial
     );
-    wall.position.set(-WAREHOUSE_WIDTH / 2, WALL_HEIGHT / 2 - 0.1, zPos);
-    wall.receiveShadow = true;
-    scene.add(wall);
-});
+    wallBack.position.set(0, WALL_HEIGHT / 2 - 0.1, -WAREHOUSE_DEPTH / 2);
+    wallBack.receiveShadow = true;
+    scene.add(wallBack);
 
-const wallRight = new THREE.Mesh(
-    new THREE.BoxGeometry(0.5, WALL_HEIGHT, WAREHOUSE_DEPTH),
-    wallMaterial
-);
-wallRight.position.set(WAREHOUSE_WIDTH / 2, WALL_HEIGHT / 2 - 0.1, 0);
-wallRight.receiveShadow = true;
-scene.add(wallRight);
+    const wallFront = new THREE.Mesh(
+        new THREE.BoxGeometry(WAREHOUSE_WIDTH, WALL_HEIGHT, 0.5),
+        wallMaterial
+    );
+    wallFront.position.set(0, WALL_HEIGHT / 2 - 0.1, WAREHOUSE_DEPTH / 2);
+    wallFront.receiveShadow = true;
+    // scene.add(wallFront); // Commented out for better visibility
+
+    // Left wall with gates
+    const leftWallZPositions = [-12.5, 0, 12.5];
+    const leftWallZSizes = [5, 15, 5];
+    leftWallZPositions.forEach((zPos, i) => {
+        const wall = new THREE.Mesh(
+            new THREE.BoxGeometry(0.5, WALL_HEIGHT, leftWallZSizes[i]),
+            wallMaterial
+        );
+        wall.position.set(-WAREHOUSE_WIDTH / 2, WALL_HEIGHT / 2 - 0.1, zPos);
+        wall.receiveShadow = true;
+        scene.add(wall);
+    });
+
+    const wallRight = new THREE.Mesh(
+        new THREE.BoxGeometry(0.5, WALL_HEIGHT, WAREHOUSE_DEPTH),
+        wallMaterial
+    );
+    wallRight.position.set(WAREHOUSE_WIDTH / 2, WALL_HEIGHT / 2 - 0.1, 0);
+    wallRight.receiveShadow = true;
+    scene.add(wallRight);
+}
 
 // --- HAY BALE SETUP ---
 const BALE_WIDTH = 7; // Corresponds to Length after rotation
@@ -186,9 +209,21 @@ function createBale(baleData) {
     scene.add(bale);
 }
 
+const urlParams = new URLSearchParams(window.location.search);
+const warehouseId = urlParams.get('warehouse_id');
+
+if (!warehouseId) {
+    window.location.href = 'index.html';
+}
+
+
+
 async function loadBales() {
-    console.log("Fetching layout from Supabase...");
-    let { data: balesData, error } = await db.from('bales').select('*');
+    console.log(`Fetching layout for warehouse ${warehouseId} from Supabase...`);
+    let { data: balesData, error } = await db
+        .from('bales')
+        .select('*')
+        .eq('warehouse_no', warehouseId);
 
     if (error) {
         console.error("Error fetching bales:", error);
@@ -212,6 +247,10 @@ async function loadBales() {
 }
 
 async function loadSampleData() {
+    if (warehouseId !== '6') {
+        console.log("No sample data for this warehouse.");
+        return;
+    }
     try {
         const response = await fetch('./bales.json');
         const sampleData = await response.json();
@@ -232,7 +271,7 @@ async function loadSampleData() {
                     orientation: 0, // Default horizontal
                     cp_number: bale.cp,
                     vehicle_number: `VEH-${stack.id}`,
-                    warehouse_no: 6,
+                    warehouse_no: warehouseId,
                     arrival_date: '2024-01-15',
                     supplier: 'Sample Supplier',
                     total_weight: '500kg',
@@ -883,5 +922,5 @@ function animate() {
 }
 
 // --- INITIALIZATION ---
-loadBales();
+loadWarehouse();
 animate();
