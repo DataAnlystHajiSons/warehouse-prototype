@@ -8,5 +8,10 @@
     "name": "Warehouse no#4",
     "width": 40,
     "depth": 160
+  },
+  "3": {
+    "name": "Warehouse no#3",
+    "width": 40,
+    "depth": 160
   }
 }
