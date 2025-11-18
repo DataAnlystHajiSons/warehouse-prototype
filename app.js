@@ -68,34 +68,46 @@ function createWarehouseModel(config) {
     const WAREHOUSE_DEPTH = config.depth;
     const WALL_HEIGHT = 20; // This can also be moved to config if it varies
 
+    // Fixed back wall position - stays constant regardless of depth changes
+    const BACK_WALL_Z = config.backWallZ !== undefined ? config.backWallZ : -20;
+    const FRONT_WALL_Z = BACK_WALL_Z + WAREHOUSE_DEPTH;
+    const FLOOR_CENTER_Z = (BACK_WALL_Z + FRONT_WALL_Z) / 2;
+
+    // Fixed right wall position - stays constant regardless of width changes
+    const RIGHT_WALL_X = config.rightWallX !== undefined ? config.rightWallX : 95;
+    const LEFT_WALL_X = RIGHT_WALL_X - WAREHOUSE_WIDTH;
+    const FLOOR_CENTER_X = (LEFT_WALL_X + RIGHT_WALL_X) / 2;
+
     // Floor
     const floorGeometry = new THREE.BoxGeometry(WAREHOUSE_WIDTH, 0.2, WAREHOUSE_DEPTH);
     const floorMaterial = new THREE.MeshStandardMaterial({ color: 0xcccccc });
     const floor = new THREE.Mesh(floorGeometry, floorMaterial);
     floor.receiveShadow = true;
-    floor.position.y = -0.1;
+    floor.position.set(FLOOR_CENTER_X, -0.1, FLOOR_CENTER_Z);
     scene.add(floor);
 
     // Walls
     const wallMaterial = new THREE.MeshStandardMaterial({ color: 0xf7f7f7 });
 
+    // Back wall - fixed position
     const wallBack = new THREE.Mesh(
         new THREE.BoxGeometry(WAREHOUSE_WIDTH, WALL_HEIGHT, 0.5),
         wallMaterial
     );
-    wallBack.position.set(0, WALL_HEIGHT / 2 - 0.1, -WAREHOUSE_DEPTH / 2);
+    wallBack.position.set(FLOOR_CENTER_X, WALL_HEIGHT / 2 - 0.1, BACK_WALL_Z);
     wallBack.receiveShadow = true;
     scene.add(wallBack);
 
+    // Front wall - moves with depth changes
     const wallFront = new THREE.Mesh(
         new THREE.BoxGeometry(WAREHOUSE_WIDTH, WALL_HEIGHT, 0.5),
         wallMaterial
     );
-    wallFront.position.set(0, WALL_HEIGHT / 2 - 0.1, WAREHOUSE_DEPTH / 2);
+    wallFront.position.set(FLOOR_CENTER_X, WALL_HEIGHT / 2 - 0.1, FRONT_WALL_Z);
     wallFront.receiveShadow = true;
     // scene.add(wallFront); // Commented out for better visibility
 
-    // Left wall with gates
+    // Left wall with gates - moves with width changes
     const leftWallZPositions = [-12.5, 0, 12.5];
     const leftWallZSizes = [5, 15, 5];
     leftWallZPositions.forEach((zPos, i) => {
@@ -103,16 +115,17 @@ function createWarehouseModel(config) {
             new THREE.BoxGeometry(0.5, WALL_HEIGHT, leftWallZSizes[i]),
             wallMaterial
         );
-        wall.position.set(-WAREHOUSE_WIDTH / 2, WALL_HEIGHT / 2 - 0.1, zPos);
+        wall.position.set(LEFT_WALL_X, WALL_HEIGHT / 2 - 0.1, zPos + FLOOR_CENTER_Z);
         wall.receiveShadow = true;
         scene.add(wall);
     });
 
+    // Right wall - fixed position
     const wallRight = new THREE.Mesh(
         new THREE.BoxGeometry(0.5, WALL_HEIGHT, WAREHOUSE_DEPTH),
         wallMaterial
     );
-    wallRight.position.set(WAREHOUSE_WIDTH / 2, WALL_HEIGHT / 2 - 0.1, 0);
+    wallRight.position.set(RIGHT_WALL_X, WALL_HEIGHT / 2 - 0.1, FLOOR_CENTER_Z);
     wallRight.receiveShadow = true;
     scene.add(wallRight);
 }
