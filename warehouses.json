@@ -2,16 +2,22 @@
   "6": {
     "name": "Warehouse no#6 Multan",
     "width": 190,
-    "depth": 40
+    "depth": 40,
+    "backWallZ": -20,
+    "rightWallX": 95
   },
   "4": {
     "name": "Warehouse no#4",
-    "width": 40,
-    "depth": 160
+    "width": 60,
+    "depth": 210,
+    "backWallZ": -80,
+    "rightWallX": 20
   },
   "3": {
     "name": "Warehouse no#3",
-    "width": 90,
-    "depth": 220
+    "width": 60,
+    "depth": 190,
+    "backWallZ": -110,
+    "rightWallX": 45
   }
 }
